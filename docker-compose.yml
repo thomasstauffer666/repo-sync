@@ -1,0 +1,13 @@
+services:
+  repo-sync:
+    image: ghcr.io/thomasstauffer666/repo-sync:latest
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:8080:8080
+    environment:
+      - REPO_URL=${REPO_URL}
+      - SYNC_AUTO_INTERVAL_TIME=0 5 * * *
+      - SYNC_COOLDOWN_SECONDS=300
+      - POST_PULL_COMMAND=date
+    volumes:
+      - /etc/localtime:/etc/localtime:ro

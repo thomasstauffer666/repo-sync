@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+
+import asyncio
+import collections
+import datetime
+import os
+import subprocess
+import time
+
+import aiocron
+import aiohttp.web
+
+REPO_URL = os.environ.get('REPO_URL')
+REPO_DIR = 'repo'
+SYNC_COOLDOWN_SECONDS = float(os.environ.get('SYNC_COOLDOWN_SECONDS', 5 * 60))
+PORT = int(os.environ.get('PORT', 8080))
+POST_PULL_COMMAND = os.environ.get('POST_PULL_COMMAND')
+SYNC_AUTO_INTERVAL_TIME = os.environ.get('SYNC_AUTO_INTERVAL_TIME', '0 5 * * *')
+
+
+class Context:
+    def __init__(self):
+        self.last_sync_time = 0
+        self.lock = asyncio.Lock()
+        self.sync_history = collections.deque(maxlen=10)
+
+
+async def sync(context):
+    async with context.lock:
+        print('Sync ...')
+        current_time = time.monotonic()
+        if (current_time - context.last_sync_time) < SYNC_COOLDOWN_SECONDS:
+            return False
+
+        # Set it already here, to reduce the risk of a denial of service
+        context.last_sync_time = current_time
+
+        def _do_sync():
+            if not REPO_URL:
+                return
+            if not os.path.exists(REPO_DIR):
+                subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, REPO_DIR], check=True)
+            else:
+                subprocess.run(['git', '-C', REPO_DIR, 'pull'], check=True)
+            if POST_PULL_COMMAND:
+                subprocess.run(POST_PULL_COMMAND, shell=True, check=True, cwd=REPO_DIR)
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _do_sync)
+
+        context.sync_history.append(datetime.datetime.now(datetime.timezone.UTC).isoformat())
+
+        return True
+
+
+async def handle_sync(request):
+    context = request.app['context']
+    try:
+        if await sync(context):
+            return aiohttp.web.Response(status=200)
+        else:
+            return aiohttp.web.Response(status=429)
+    except Exception as e:
+        print(f'Error during sync: {e}')
+        return aiohttp.web.Response(status=500)
+
+
+async def handle_status(request):
+    context = request.app['context']
+    data = {
+        'last_sync_ago_seconds': int(time.monotonic() - context.last_sync_time),
+        'sync_history': list(context.sync_history),
+    }
+    return aiohttp.web.json_response(data)
+
+
+async def start_background_tasks(app):
+    context = app['context']
+    try:
+        await sync(context)
+    except Exception as e:
+        print(f'Initial sync failed: {e}')
+
+    @aiocron.crontab(SYNC_AUTO_INTERVAL_TIME)
+    async def scheduled_sync():
+        await sync(context)
+
+
+async def init_app():
+    print(f'REPO_URL={REPO_URL}')
+    print(f'REPO_DIR={REPO_DIR}')
+    print(f'SYNC_COOLDOWN_SECONDS={SYNC_COOLDOWN_SECONDS}')
+    print(f'PORT={PORT}')
+    print(f'POST_PULL_COMMAND={POST_PULL_COMMAND}')
+    print(f'SYNC_AUTO_INTERVAL_TIME={SYNC_AUTO_INTERVAL_TIME}')
+    context = Context()
+    app = aiohttp.web.Application()
+    app['context'] = context
+    app.add_routes(
+        [
+            aiohttp.web.post('/sync', handle_sync),
+            aiohttp.web.get('/status', handle_status),
+        ]
+    )
+    app.on_startup.append(start_background_tasks)
+    return app
+
+
+if __name__ == '__main__':
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    app = loop.run_until_complete(init_app())
+    print(f'Starting server on port {PORT}...')
+    aiohttp.web.run_app(app, port=PORT)

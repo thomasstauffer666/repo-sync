@@ -1,0 +1,27 @@
+[project]
+name = "git-sync"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp==3.13.5",
+    "aiocron==2.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.9.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+include = ["pyproject.toml", "repo-sync"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "C", "B", "UP", "FURB", "RUF", "PERF", "FLY", "ERA", "C4", "ISC", "ICN", "EXE", "PIE"]
+
+[tool.uv]
+managed = true
