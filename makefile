@@ -48,6 +48,6 @@ ifndef CR_PAT
 endif
 	echo $(CR_PAT) | docker login ghcr.io --username thomasstauffer666 --password-stdin
 	docker tag repo-sync ghcr.io/thomasstauffer666/repo-sync:latest
-	docker tag repo-sync ghcr.io/thomasstauffer666/repo-sync:1.0.0
+	docker tag repo-sync ghcr.io/thomasstauffer666/repo-sync:1.0.1
 	docker push ghcr.io/thomasstauffer666/repo-sync:latest
-	docker push ghcr.io/thomasstauffer666/repo-sync:1.0.0
+	docker push ghcr.io/thomasstauffer666/repo-sync:1.0.1

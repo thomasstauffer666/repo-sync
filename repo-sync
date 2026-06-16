@@ -36,12 +36,14 @@ async def sync(context):
         context.last_sync_time = current_time
 
         def _do_sync():
-            if not REPO_URL:
-                return
-            if not os.path.exists(REPO_DIR):
-                subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, REPO_DIR], check=True)
-            else:
-                subprocess.run(['git', '-C', REPO_DIR, 'pull'], check=True)
+            if REPO_URL:
+                if not os.path.exists(os.path.join(REPO_DIR, '.git')):
+                    print('Clone ...')
+                    subprocess.run(['git', 'clone', '--depth', '1', REPO_URL, REPO_DIR], check=True)
+                else:
+                    print('Fetch ...')
+                    subprocess.run(['git', '-C', REPO_DIR, 'fetch', '--all'], cwd=REPO_DIR, check=True)
+                    subprocess.run(['git', '-C', REPO_DIR, 'reset', '--hard', 'origin/HEAD'], cwd=REPO_DIR, check=True)
             if POST_PULL_COMMAND:
                 if os.path.exists(REPO_DIR):
                     print('Post Pull Command ...')
